@@ -1,0 +1,11 @@
+{
+  "name": "RoutePilot – Routenassistent",
+  "short_name": "RoutePilot",
+  "description": "Routenplanung und Verkehrsmonitor für Fahrer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1015",
+  "theme_color": "#0b1015",
+  "lang": "de",
+  "icons": [{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
