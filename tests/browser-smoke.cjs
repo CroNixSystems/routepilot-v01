@@ -13,21 +13,34 @@ const plan={origin:{label:'Ravensburg',lat:47.782,lng:9.612},destination:{label:
    const context=await browser.newContext({viewport:{width,height:950},geolocation:{latitude:48,longitude:9},permissions:['geolocation']});
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
    let fuels=0,roads=0,routes=0;
-   await page.clock.install();
    await page.route('**/api/routes',r=>{routes++;return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(plan)});});
    await page.route('**/api/traffic?*',r=>{roads++;return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'ok',checkedAt:new Date().toISOString(),roads:['A96'],events:[],errors:[],scope:'motorway-wide'})});});
    await page.route('**/api/fuel',r=>{fuels++;return r.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Tankstellen-API noch nicht eingerichtet.'})});});
+   // Capture the real 15-minute callback without changing global clocks used by
+   // third-party hosting scripts. All other browser timers run normally.
+   await page.addInitScript(()=>{
+    const active=new Map();window.__routepilotTimers=active;
+    const nativeSet=window.setInterval.bind(window),nativeClear=window.clearInterval.bind(window);
+    window.setInterval=(fn,ms,...args)=>{const id=nativeSet(fn,ms,...args);if(ms===900000 && typeof fn==='function')active.set(id,()=>fn(...args));return id;};
+    window.clearInterval=id=>{active.delete(id);return nativeClear(id);};
+   });
    await page.goto(base);
+   await page.getByLabel('Startadresse',{exact:true}).fill('');
    assert.equal(routes,0);assert.equal(fuels,0);
    await page.getByRole('button',{name:'Ravensburg → München',exact:true}).click();
+   await page.waitForFunction(()=>document.querySelector('#origin').value==='Ravensburg' && document.querySelector('#destination').value==='München');
+   assert.equal(await page.locator('#origin').inputValue(),'Ravensburg');
+   assert.equal(await page.locator('#destination').inputValue(),'München');
    assert.equal(routes,0,'preset must not fetch');
    await page.getByRole('button',{name:'Routen vergleichen',exact:true}).click();
-   await page.getByRole('heading',{name:'2 Routen im Vergleich',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'2 Routen im Vergleich',exact:true}).waitFor().catch(async e=>{console.log({routes,fuels,roads,errors,headings:await page.locator('h2').allTextContents(),alerts:await page.getByRole('alert').allTextContents()});throw e;});
    assert.equal(routes,1);assert.equal(fuels,0);
    assert.equal(await page.locator('.route-card[aria-pressed=true] strong').textContent(),'Route 2');
    await page.getByRole('button',{name:'Schnell',exact:true}).click();
+   await page.waitForFunction(()=>document.querySelector('.route-card[aria-pressed=true] strong')?.textContent==='Route 1');
    assert.equal(await page.locator('.route-card[aria-pressed=true] strong').textContent(),'Route 1');
    await page.getByLabel('Preisannahme · €/l',{exact:true}).fill('2.00');
+   await page.waitForFunction(()=>document.querySelector('.trip-summary h2')?.textContent.includes('32,00'));
    assert.ok((await page.locator('.trip-summary h2').textContent()).includes('32,00'));
    assert.equal(routes,1,'cost editing must not call routing or fuel');
    const href=await page.getByRole('link',{name:'In Google Maps öffnen'}).getAttribute('href');assert.equal(new URL(href).hostname,'www.google.com');
@@ -35,7 +48,10 @@ const plan={origin:{label:'Ravensburg',lat:47.782,lng:9.612},destination:{label:
    await page.getByRole('button',{name:'Routen vergleichen',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'Tankstellen-API'}).waitFor();assert.equal(fuels,1);
    await page.getByRole('button',{name:'Fahrtmodus starten',exact:true}).click();
-   const before=roads;await page.clock.fastForward(16*60000);await page.waitForTimeout(100);
+   await page.locator('.traffic-panel .icon-button[aria-label="Verkehrsmeldungen manuell prüfen"]:not([disabled])').waitFor();
+   const before=roads;const timers=await page.evaluate(()=>{const callbacks=[...window.__routepilotTimers.values()];callbacks.forEach(fn=>fn());return callbacks.length;});
+   assert.ok(timers>=1,'a 15-minute foreground interval must be registered');
+   await page.waitForTimeout(200);
    assert.ok(roads>before);assert.equal(fuels,1,'timer must never poll fuel');
    const download=page.waitForEvent('download');await page.getByRole('button',{name:'Fahrtübersicht herunterladen'}).click();assert.equal((await download).suggestedFilename(),'RoutePilot-Fahrt.txt');
    await page.getByRole('button',{name:'Hinweis schließen'}).click().catch(()=>{});
