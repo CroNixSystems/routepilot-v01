@@ -121,7 +121,7 @@ export default function HomePage(){
       <section className="intro"><div><p className="eyebrow">WENIGER UMWEGE. MEHR ÜBERBLICK.</p><h1>Deine Route. <span>Deine Kosten.</span></h1><p>Echte Straßenrouten vergleichen. Kraftstoffkosten nachvollziehen. Informiert losfahren.</p></div><div className="intro-note"><ShieldAlert size={19}/><span>Für PKW & leichte Transporter<br/><strong>Keine LKW-Navigation</strong></span></div></section>
       <div className="workspace">
         <aside className="planner panel" id="planner"><div className="panel-title"><span className="step-number">01</span><h2>Wohin geht’s?</h2><SlidersHorizontal size={18}/></div>
-          <form onSubmit={compare} aria-busy={loading}><fieldset disabled={loading}>
+          <form onSubmit={compare} aria-busy={loading}><fieldset disabled={loading || !storageReady}>
             <label className="field-label" htmlFor="origin">Startadresse</label><div className="place-input"><MapPin size={18}/><input id="origin" required maxLength={180} placeholder="Ort, PLZ oder Straße" value={origin} onChange={e=>{setOrigin(e.target.value);setOriginPlace(null);}}/></div>
             <div className="swap-row"><span/><button type="button" aria-label="Start und Ziel tauschen" onClick={()=>{setOrigin(destination);setDestination(origin);setOriginPlace(destinationPlace);setDestinationPlace(originPlace);}}><ArrowDownUp size={15}/></button></div>
             <label className="field-label" htmlFor="destination">Zieladresse</label><div className="place-input"><Navigation size={18}/><input id="destination" required maxLength={180} placeholder="Wohin möchtest du fahren?" value={destination} onChange={e=>{setDestination(e.target.value);setDestinationPlace(null);}}/></div>
@@ -133,7 +133,7 @@ export default function HomePage(){
             <button className="primary full" type="submit" disabled={loading}>{loading?<><Loader2 size={18} className="spin"/> Routen werden verglichen …</>:<>Routen vergleichen <ArrowRight size={18}/></>}</button>
             {error && <div className="error" role="alert">{error}{plan && <p>Der bisherige Vergleich bleibt mit seinem ursprünglichen Zeitstempel sichtbar.</p>}</div>}
           </fieldset></form>
-          <div className="quickstart"><h3>Schnellstart für die Präsentation</h3><p className="hint">Lädt nur Start und Ziel. Die Route wird live berechnet.</p>{presets.map((sample,i)=><button type="button" key={sample.name} onClick={()=>loadPreset(i)} disabled={loading}><Route size={14}/>{sample.name}<ArrowRight size={14}/></button>)}</div>
+          <div className="quickstart"><h3>Schnellstart für die Präsentation</h3><p className="hint">Lädt nur Start und Ziel. Die Route wird live berechnet.</p>{presets.map((sample,i)=><button type="button" key={sample.name} onClick={()=>loadPreset(i)} disabled={loading || !storageReady}><Route size={14}/>{sample.name}<ArrowRight size={14}/></button>)}</div>
           <p className="privacy-note"><Check size={14}/> Kein Konto. Keine Werbung. Keine KI-Aufrufe.</p>
         </aside>
         <section className="results" aria-label="Routenvergleich">

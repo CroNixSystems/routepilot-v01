@@ -43,6 +43,7 @@ const plan={origin:{label:'Ravensburg',lat:47.782,lng:9.612},destination:{label:
    const axe=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
    console.log(JSON.stringify({width,violations:axe.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))}))}));
    assert.deepEqual(axe.violations,[]);
+   await page.evaluate(()=>scrollTo(0,0));
    await page.screenshot({path:`/tmp/routepilot-v02-${width}.png`,fullPage:true});
    await page.getByRole('button',{name:'Fahrt beenden'}).click();assert.equal(await page.locator('.route-card').count(),0);
    assert.deepEqual(errors,[]);await context.close();

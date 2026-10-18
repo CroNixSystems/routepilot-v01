@@ -39,7 +39,8 @@ export async function POST(request:NextRequest){
   let origin,destination;
   try{const body=await readSmallJson(request);origin=parsePlace(body.origin);destination=parsePlace(body.destination);}
   catch{return NextResponse.json({error:'Bitte gültige Start- und Zielorte in Deutschland angeben.'},{status:400,headers});}
-  const retry=limit(clientId(request));
+  const phase=typeof origin==='string' || typeof destination==='string' ? 'search' : 'route';
+  const retry=limit(`${clientId(request)}:${phase}`);
   if(retry)return NextResponse.json({error:'Bitte 15 Sekunden bis zum nächsten Routenvergleich warten.'},{status:429,headers:{...headers,'Retry-After':String(retry)}});
   try{
     const starts=await geocode(origin),ends=await geocode(destination);

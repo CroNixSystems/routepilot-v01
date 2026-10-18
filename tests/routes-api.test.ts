@@ -20,7 +20,9 @@ test('routing endpoint handles input, providers and rate limits',async t=>{
   });
   await t.test('an ambiguous place requires explicit user confirmation',async()=>{
    globalThis.fetch=async()=>Response.json({features:[{geometry:{coordinates:[13.4,52.5]},properties:{countrycode:'DE',name:'Ort A'}},{geometry:{coordinates:[13.5,52.6]},properties:{countrycode:'DE',name:'Ort B'}}]});
-   const result=await call({origin:'Mehrdeutiger Testort',destination});assert.equal(result.status,409);const data=await result.json();assert.equal(data.origins.length,2);assert.equal(data.code,'choose_places');
+   const result=await call({origin:'Mehrdeutiger Testort',destination},'confirm-location-flow');assert.equal(result.status,409);const data=await result.json();assert.equal(data.origins.length,2);assert.equal(data.code,'choose_places');
+   globalThis.fetch=async()=>Response.json(fixture);
+   assert.equal((await call({origin:data.origins[0],destination},'confirm-location-flow')).status,200,'confirming a place must not be blocked by the geocoding cooldown');
   });
  }finally{globalThis.fetch=original;}
 });
