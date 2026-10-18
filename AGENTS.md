@@ -28,4 +28,13 @@
 - Keep README feature/limitation list accurate. Add tests for new matching/pricing logic.
 - Keep `.env.local` out of git. Never commit secrets.
 
-- Keep the intended GitHub repository private before pushing. Deploy only to the intended Vercel team after verifying its plan permits the usage; validate a preview before production promotion.
+- The user explicitly approved public source for the presentation demo on 18 October 2026. Push only to the intended CroNixSystems/routepilot-v01 repository. Deploy only to the intended Vercel team after verifying its plan permits the usage; validate a preview before production promotion.
+
+## v0.2 routing and presentation
+
+- `/api/routes` performs manual-only Photon geocoding and OSRM routing. No autocomplete/polling. Use editable server URL configuration to switch providers and respect public-service fair-use limits.
+- `src/lib/routing.mjs` validates geometry, computes fuel estimates, ranks only returned alternatives, and checks geometric proximity to road events. Do not present the result as globally optimal or traffic-aware.
+- Fuel estimates use explicit user-editable consumption and price assumptions. Do not label them live prices or total journey costs; tolls, parking and wear are excluded.
+- RouteMap uses Leaflet with attributed OpenStreetMap tiles; respect provider policies, no offline tile prefetch.
+- A 3-km corridor is only spatial proximity, not a guarantee of direction, connectivity or actual impact. Events without coordinates remain available in the motorway-wide view.
+- `/transparenz` describes data, limitations and browser storage. Do not invent operator/company details.

@@ -65,7 +65,7 @@ export function mapEvents(payload, road, type) {
   if (!Array.isArray(items)) throw new Error('Invalid traffic response');
   return items.map(item => {
     if (!item || typeof item !== 'object' || typeof item.identifier !== 'string' || !item.identifier || typeof item.title !== 'string') throw new Error('Invalid traffic event');
-    return {id:`${road}-${type}-${item.identifier}`, road, type, future:item.future === true, title:toText(item.title) || 'Verkehrsmeldung', subtitle:toText(item.subtitle), description:toText(item.description)};
+    return {id:`${road}-${type}-${item.identifier}`, road, type, future:item.future === true, coordinate:item.coordinate && isValidCoordinates(item.coordinate.lat,item.coordinate.long) ? {lat:item.coordinate.lat,lng:item.coordinate.long} : null, title:toText(item.title) || 'Verkehrsmeldung', subtitle:toText(item.subtitle), description:toText(item.description)};
   });
 }
 

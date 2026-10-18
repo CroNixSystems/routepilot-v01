@@ -1,260 +1,166 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowRight, Bell, Check, ChevronRight, CircleHelp, Clock3, Construction, ExternalLink, Fuel, Gauge, MapPin, Navigation, Plus, RadioTower, RefreshCw, Route, Settings2, ShieldAlert, ShieldCheck, Smartphone, Trash2, X } from "lucide-react";
-import type { FuelSnapshot, FuelType, TrafficEvent, TrafficResponse, Trip, VehicleType } from "@/lib/types";
-import { mapsDirectionsUrl, newEvents, normalizeRoads, restoreTrip } from "@/lib/logic.mjs";
+import dynamic from 'next/dynamic';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {ArrowDownUp,ArrowRight,Check,CheckCircle2,ChevronDown,Clock3,Download,ExternalLink,Fuel,Info,Leaf,Loader2,MapPin,Navigation,Plus,RefreshCw,Route,ShieldAlert,SlidersHorizontal,TriangleAlert,X} from 'lucide-react';
+import type {FuelSnapshot,FuelType,Place,RouteOption,RoutePlan,TrafficEvent,TrafficResponse} from '@/lib/types';
+import {mapsDirectionsUrl,normalizeRoads} from '@/lib/logic.mjs';
+import {fuelEstimate,nearRoute,rankRoutes} from '@/lib/routing.mjs';
+const RouteMap=dynamic(()=>import('@/components/RouteMap'),{ssr:false,loading:()=> <div className="map-loading" role="status">Karte wird geladen …</div>});
+const euros=(n:number)=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(n);
+const number=(n:number,digits=0)=>new Intl.NumberFormat('de-DE',{maximumFractionDigits:digits}).format(n);
+const duration=(seconds:number)=>`${Math.floor(seconds/3600)} Std. ${Math.round(seconds%3600/60)} Min.`;
+const time=(date:string)=>new Date(date).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const presets=[
+  {name:'Ravensburg → München',origin:{label:'Ravensburg',lat:47.782,lng:9.612},destination:{label:'München',lat:48.137,lng:11.576}},
+  {name:'Berlin → Hamburg',origin:{label:'Berlin',lat:52.52,lng:13.405},destination:{label:'Hamburg',lat:53.551,lng:9.994}},
+  {name:'Köln → Frankfurt',origin:{label:'Köln',lat:50.938,lng:6.96},destination:{label:'Frankfurt am Main',lat:50.11,lng:8.682}},
+];
+const labels={closure:'Sperrung',warning:'Verkehrsmeldung',roadworks:'Baustelle'};
+const savedKey='routepilot-v02-plan';
 
-type ActiveScreen = "plan" | "monitor";
-const storageKey = "routepilot-v01-active-trip";
-const tagLabels = {closure:"Sperrung",warning:"Verkehrsmeldung",roadworks:"Baustelle"};
+export default function HomePage(){
+  const [origin,setOrigin]=useState('');const [destination,setDestination]=useState('');
+  const [originPlace,setOriginPlace]=useState<Place|null>(null);const [destinationPlace,setDestinationPlace]=useState<Place|null>(null);
+  const [choices,setChoices]=useState<{origins:Place[];destinations:Place[]}|null>(null);
+  const [consumption,setConsumption]=useState('8');const [price,setPrice]=useState('1.80');
+  const [fuelType,setFuelType]=useState<FuelType>('diesel');const [checkFuel,setCheckFuel]=useState(false);
+  const [plan,setPlan]=useState<RoutePlan|null>(null);const [selected,setSelected]=useState('');
+  const [preference,setPreference]=useState<'cheapest'|'fastest'>('cheapest');
+  const [fuel,setFuel]=useState<FuelSnapshot|null>(null);const [fuelError,setFuelError]=useState('');
+  const [traffic,setTraffic]=useState<TrafficResponse|null>(null);const [trafficError,setTrafficError]=useState('');
+  const [manualRoad,setManualRoad]=useState('');const [extraRoads,setExtraRoads]=useState<string[]>([]);
+  const [loading,setLoading]=useState(false);const [checking,setChecking]=useState(false);const [error,setError]=useState('');
+  const [notice,setNotice]=useState('');const [journey,setJourney]=useState(false);const [showAll,setShowAll]=useState(false);
+  const [storageReady,setStorageReady]=useState(false);
+  const trafficBusy=useRef(false);const lastTraffic=useRef(0);const trafficRequest=useRef<AbortController|null>(null);const requestGeneration=useRef(0);
+  const route=plan?.routes.find(r=>r.id===selected) ?? null;
+  const allRoads=[...new Set([...(route?.roads ?? []),...extraRoads])];
+  const roadKey=allRoads.slice(0,5).join(',');
+  const litres=Number(consumption),priceNumber=Number(price);
+  const validCosts=Number.isFinite(litres) && litres>=1 && litres<=40 && Number.isFinite(priceNumber) && priceNumber>=0.5 && priceNumber<=5;
+  const estimate=route && validCosts ? fuelEstimate(route.distanceMetres,litres,priceNumber) : null;
+  const fastest=plan ? rankRoutes(plan.routes,'fastest')[0] : null;
+  const difference=route && fastest && validCosts ? Math.max(0,fuelEstimate(fastest.distanceMetres,litres,priceNumber).cost-fuelEstimate(route.distanceMetres,litres,priceNumber).cost) : 0;
 
-function shortTime(iso?: string) {
-  if (!iso) return "Noch nicht geprüft";
-  return new Date(iso).toLocaleString("de-DE", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
-}
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem(savedKey);
+      if(raw){const value=JSON.parse(raw);if(typeof value.origin==='string' && typeof value.destination==='string'){setOrigin(value.origin.slice(0,180));setDestination(value.destination.slice(0,180));if(typeof value.consumption==='string')setConsumption(value.consumption);if(typeof value.price==='string')setPrice(value.price);}}
+    }catch{/* A blocked browser store must not stop planning. */}
+    setStorageReady(true);
+  },[]);
+  useEffect(()=>{if(storageReady)try{localStorage.setItem(savedKey,JSON.stringify({origin,destination,consumption,price}));}catch{/* Session remains usable. */}},[origin,destination,consumption,price,storageReady]);
+  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),5000);return()=>clearTimeout(timer);},[notice]);
 
-function notificationPermission() {
-  return typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
-}
+  const checkTraffic=useCallback(async(roads:string)=>{
+    if(!roads || trafficBusy.current)return;
+    trafficBusy.current=true;setChecking(true);
+    const generation=requestGeneration.current;
+    const controller=new AbortController();trafficRequest.current=controller;
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    try{
+      const response=await fetch(`/api/traffic?roads=${encodeURIComponent(roads)}`,{cache:'no-store',signal:controller.signal});
+      const data=await response.json();
+      if(generation!==requestGeneration.current)return;
+      if(!Array.isArray(data.events) || !Array.isArray(data.errors))throw new Error('Ungültige Antwort');
+      setTraffic(data);setTrafficError(data.status==='error'?'Verkehrsdaten derzeit nicht verfügbar. Das bedeutet keine freie Fahrt.':'');
+      lastTraffic.current=Date.now();
+    }catch{
+      if(generation===requestGeneration.current){setTraffic(null);setTrafficError('Verkehrsdaten nicht erreichbar. Bitte Verkehrszeichen und Navigation beachten.');}
+    }finally{clearTimeout(timeout);if(controller===trafficRequest.current){trafficBusy.current=false;setChecking(false);}}
+  },[]);
+  useEffect(()=>{
+    requestGeneration.current++;trafficRequest.current?.abort();trafficBusy.current=false;setTraffic(null);setTrafficError('');setChecking(false);
+    if(!roadKey || loading)return;
+    if(document.visibilityState==='visible')void checkTraffic(roadKey);
+    const timer=setInterval(()=>{if(document.visibilityState==='visible')void checkTraffic(roadKey);},15*60*1000);
+    const visible=()=>{if(document.visibilityState==='visible' && Date.now()-lastTraffic.current>=15*60*1000)void checkTraffic(roadKey);};
+    document.addEventListener('visibilitychange',visible);
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
+  },[roadKey,plan?.checkedAt,loading,checkTraffic]);
 
-function HighwayEvents({items}: {items: TrafficEvent[]}) {
-  if (items.length === 0) return <div className="empty"><ShieldCheck size={24} style={{margin:"0 auto 9px"}}/>Aktuell keine Meldungen in den abgefragten Kategorien. Das ist keine Garantie für freie Fahrt.</div>;
-  return <div className="alert-list" tabIndex={0} role="region" aria-label="Autobahnmeldungen">{items.map(event => <article className="alert" key={event.id}>
-    <span className={`tag ${event.type}`}>{event.type === "closure" ? <ShieldAlert size={12}/> : event.type === "warning" ? <AlertTriangle size={12}/> : <Construction size={12}/>} {tagLabels[event.type]} · {event.road}{event.future ? " · Geplant" : ""}</span>
-    <div className="alert-title">{event.title}</div>
-    {event.subtitle && <p className="alert-desc">{event.subtitle}</p>}
-    {event.description && event.description !== event.subtitle && <p className="alert-desc">{event.description.slice(0,340)}</p>}
-  </article>)}</div>;
-}
-
-export default function HomePage() {
-  const [origin,setOrigin] = useState("");
-  const [destination,setDestination] = useState("");
-  const [roadInput,setRoadInput] = useState("");
-  const [roads,setRoads] = useState<string[]>([]);
-  const [vehicle,setVehicle] = useState<VehicleType>("transporter");
-  const [fuelType,setFuelType] = useState<FuelType>("diesel");
-  const [checkFuel,setCheckFuel] = useState(false);
-  const [trip,setTrip] = useState<Trip | null>(null);
-  const [traffic,setTraffic] = useState<TrafficResponse | null>(null);
-  const [screen,setScreen] = useState<ActiveScreen>("plan");
-  const [loading,setLoading] = useState(false);
-  const [checking,setChecking] = useState(false);
-  const [error,setError] = useState("");
-  const [fuelError,setFuelError] = useState("");
-  const [toast,setToast] = useState("");
-  const [ready,setReady] = useState(false);
-  const currentTraffic = useRef<TrafficResponse | null>(null);
-  const pollInProgress = useRef(false);
-  const trafficController = useRef<AbortController | null>(null);
-  const trafficGeneration = useRef(0);
-  const lastCheckMs = useRef(0);
-  const activeTripRoads = trip?.roads.join(",") ?? "";
-  const activeTripCreatedAt = trip?.createdAt;
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const restored = restoreTrip(JSON.parse(saved)) as Trip | null;
-        if (restored) {
-          setTrip(restored); setOrigin(restored.origin); setDestination(restored.destination);
-          setVehicle(restored.vehicle); setFuelType(restored.fuelType); setRoads(normalizeRoads(restored.roads));
-          setScreen("monitor");
-        }
-      }
-    } catch { /* Storage can be unavailable in private mode. */ }
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    try {
-      if (trip) localStorage.setItem(storageKey, JSON.stringify(trip));
-      else localStorage.removeItem(storageKey);
-    } catch { setToast("Lokales Speichern nicht verfügbar. Die Fahrt bleibt nur in diesem Tab erhalten."); }
-  }, [trip,ready]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timeout = setTimeout(()=>setToast(""), 4500);
-    return ()=>clearTimeout(timeout);
-  }, [toast]);
-
-  const checkTraffic = useCallback(async (selectedRoads: string[], notify = true) => {
-    if (!selectedRoads.length || pollInProgress.current) return;
-    pollInProgress.current = true;
-    setChecking(true);
-    const generation = trafficGeneration.current;
-    const controller = new AbortController();
-    trafficController.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 12_000);
-    try {
-      const response = await fetch(`/api/traffic?roads=${encodeURIComponent(selectedRoads.join(","))}`, {cache:"no-store", signal:controller.signal});
-      const result: TrafficResponse = await response.json();
-      if (generation !== trafficGeneration.current) return;
-      if (!Array.isArray(result.events) || !Array.isArray(result.errors) || !["ok","partial","error"].includes(result.status)) throw new Error("Invalid traffic response");
-      if (result.status === "error") {
-        setError("Verkehrsdaten derzeit nicht verfügbar. Bitte Google Maps beachten.");
-      } else setError("");
-      if (notify && result.status !== "error" && currentTraffic.current) {
-        const fresh = newEvents(currentTraffic.current.events, result.events);
-        if (fresh.length) {
-          setToast(`${fresh.length} neue Verkehrsmeldung${fresh.length > 1 ? "en" : ""} gefunden`);
-          if (notificationPermission() === "granted") {
-            new Notification("RoutePilot · Neue Verkehrsmeldung", {body:`${fresh.length} neue Meldung(en) für ${selectedRoads.join(", ")}. Bitte sicher anhalten, bevor du Details liest.`});
-          }
-        }
-      }
-      currentTraffic.current = result;
-      setTraffic(result);
-      lastCheckMs.current = Date.now();
-    } catch {
-      if (generation !== trafficGeneration.current) return;
-      setTraffic(null);
-      setError("Keine Verbindung zur Verkehrsabfrage. Google Maps bleibt die Hauptnavigation.");
-    } finally {
-      clearTimeout(timeout);
-      if (trafficController.current === controller) {pollInProgress.current = false;setChecking(false);}
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!activeTripRoads || loading) return;
-    const activeRoads = normalizeRoads(activeTripRoads);
-    if (document.visibilityState === "visible") void checkTraffic(activeRoads, false);
-    const timer = window.setInterval(() => {if(document.visibilityState === "visible") void checkTraffic(activeRoads);}, 15 * 60 * 1000);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible" && Date.now() - lastCheckMs.current >= 15 * 60 * 1000) void checkTraffic(activeRoads);
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {window.clearInterval(timer);document.removeEventListener("visibilitychange", onVisibility);};
-  }, [activeTripRoads, activeTripCreatedAt, loading, checkTraffic]);
-
-  function addRoad() {
-    const [normalized] = normalizeRoads(roadInput);
-    if (!normalized) {setToast("Bitte eine Autobahn eingeben, z. B. A8.");return;}
-    if (roads.includes(normalized)) {setRoadInput("");return;}
-    if (roads.length >= 5) {setToast("Maximal fünf Autobahnen in Version 0.1.");return;}
-    setRoads([...roads,normalized]);setRoadInput("");
+  async function loadFuel():Promise<FuelSnapshot|null>{
+    if(!checkFuel)return null;
+    try{
+      if(!navigator.geolocation)throw new Error('Standortfunktion nicht verfügbar.');
+      const position=await new Promise<GeolocationPosition>((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:false,maximumAge:120000,timeout:7500}));
+      const response=await fetch('/api/fuel',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(12000),body:JSON.stringify({lat:position.coords.latitude,lng:position.coords.longitude,type:fuelType})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error || 'Tankpreise nicht verfügbar.');
+      return data;
+    }catch(e){setFuelError(e instanceof Error?e.message:'Standortfreigabe oder Tankpreisabfrage nicht möglich.');return null;}
   }
 
-  async function getFuelSnapshot(): Promise<FuelSnapshot | null> {
-    if (!checkFuel) return null;
-    if (!navigator.geolocation) {setFuelError("Standortfunktion nicht verfügbar.");return null;}
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve,reject) => navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:false,maximumAge:120_000,timeout:7500}));
-      const response = await fetch("/api/fuel", {method:"POST",headers:{"Content-Type":"application/json"},signal:AbortSignal.timeout(12_000),body:JSON.stringify({lat:position.coords.latitude,lng:position.coords.longitude,type:fuelType})});
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Tankpreise nicht verfügbar");
-      return data as FuelSnapshot;
-    } catch(e) {
-      setFuelError(e instanceof Error && e.message ? e.message : "Standort oder Kraftstoffpreise konnten nicht ermittelt werden.");
-      return null;
-    }
+  async function compare(event:React.FormEvent){
+    event.preventDefault();if(loading)return;
+    if(!validCosts){setError('Bitte Verbrauch von 1–40 l/100 km und Preis von 0,50–5,00 €/l angeben.');return;}
+    setLoading(true);setError('');setChoices(null);setFuelError('');setJourney(false);
+    try{
+      const response=await fetch('/api/routes',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(40000),body:JSON.stringify({origin:originPlace ?? origin,destination:destinationPlace ?? destination})});
+      const data=await response.json();
+      if(response.status===409){setChoices({origins:data.origins,destinations:data.destinations});setError('Mehrere Orte gefunden. Bitte Start und Ziel bestätigen und erneut vergleichen.');return;}
+      if(!response.ok)throw new Error(data.error || 'Routenvergleich fehlgeschlagen.');
+      const result=data as RoutePlan;
+      setPlan(result);setSelected(rankRoutes(result.routes,preference)[0].id);setExtraRoads([]);
+      setFuel(await loadFuel());setNotice('Routen berechnet. Wähle die passende Alternative.');
+    }catch(e){setError(e instanceof Error && e.name==='TimeoutError'?'Der Routenvergleich hat zu lange gedauert. Bitte erneut versuchen.':e instanceof Error?e.message:'Keine Verbindung zum Routenvergleich.');}
+    finally{setLoading(false);}
   }
+  function choosePreference(value:'cheapest'|'fastest'){setPreference(value);if(plan)setSelected(rankRoutes(plan.routes,value)[0].id);}
+  function loadPreset(index:number){const sample=presets[index];setOrigin(sample.origin.label);setDestination(sample.destination.label);setOriginPlace(sample.origin);setDestinationPlace(sample.destination);setChoices(null);setError('');setNotice('Startpunkte geladen. „Routen vergleichen“ ruft echte Routendaten ab.');}
+  function addRoad(){const roads=normalizeRoads(manualRoad);if(!roads.length){setNotice('Bitte eine Autobahn wie A7 angeben.');return;}setExtraRoads(current=>[...new Set([...current,...roads])].slice(0,5));setManualRoad('');}
+  function endJourney(){setJourney(false);setPlan(null);setSelected('');setTraffic(null);setFuel(null);setFuelError('');setExtraRoads([]);setNotice('Fahrt beendet. Routendaten und Tankpreissnapshot entfernt.');}
+  function exportPlan(){if(!plan || !route || !estimate)return;const text=`RoutePilot · Fahrtübersicht\n${plan.origin.label}\n→ ${plan.destination.label}\n\nStrecke: ${number(route.distanceMetres/1000,1)} km\nModellfahrzeit ohne Live-Verkehr: ${duration(route.durationSeconds)}\nKraftstoffschätzung: ${euros(estimate.cost)} (${number(estimate.litres,1)} l)\nAnnahmen: ${consumption} l/100 km · ${price} €/l\nOhne Maut, Parken, Verschleiß. Kein garantierter Endpreis.\nQuelle: ${plan.source} · ${time(plan.checkedAt)}\nNavigation: ${mapsDirectionsUrl(plan.origin.label,plan.destination.label)}\nGoogle Maps kann eine andere Route wählen.\n`;const url=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='RoutePilot-Fahrt.txt';a.click();URL.revokeObjectURL(url);}
+  const selectRoute=useCallback((id:string)=>{setSelected(id);setShowAll(false);},[]);
+  const corridor=route && traffic ? traffic.events.filter(event=>event.coordinate && nearRoute(event.coordinate,route.geometry)) : [];
+  const events=showAll ? traffic?.events ?? [] : corridor;
 
-  async function planTrip() {
-    if (!origin.trim() || !destination.trim()) {setError("Bitte Start und Ziel eingeben.");return;}
-    trafficGeneration.current += 1;
-    trafficController.current?.abort(); pollInProgress.current = false;
-    setError("");setFuelError("");setLoading(true);setTraffic(null);currentTraffic.current = null;
-    try {
-      const fuel = await getFuelSnapshot();
-      const newTrip: Trip = {origin:origin.trim(),destination:destination.trim(),roads:[...roads],vehicle,fuelType,createdAt:new Date().toISOString(),fuel};
-      setTrip(newTrip);
-      setScreen("monitor");setToast("Fahrt vorbereitet – Google Maps kann gestartet werden.");
-    } finally {setLoading(false);}
-  }
-
-  function endTrip() {
-    trafficGeneration.current += 1;
-    trafficController.current?.abort(); pollInProgress.current = false;
-    setError("");setFuelError("");setChecking(false);
-    setTrip(null);setTraffic(null);currentTraffic.current=null;setScreen("plan");setToast("Fahrt beendet und lokale Daten entfernt.");
-  }
-
-  async function activateNotifications() {
-    if ("Notification" in window) {
-      const permission = await Notification.requestPermission();
-      setToast(permission === "granted" ? "Benachrichtigungen aktiviert, solange der Browser sie zustellt." : "Benachrichtigungen nicht erlaubt.");
-    } else setToast("Dieser Browser unterstützt keine Desktop-Benachrichtigungen.");
-  }
-
-  function navUrl() {return trip ? mapsDirectionsUrl(trip.origin,trip.destination) : "#";}
-
-  return <main id="main" className="shell">
-    <header className="top"><div className="logo"><span className="logo-mark"><Route size={23} strokeWidth={2.8}/></span> RoutePilot <span className="version">V 0.1</span></div><div className="top-right"><span className="pulse"/> WEB PROTOTYP · DEUTSCHLAND</div></header>
-    <section className="hero"><div className="eyebrow">Routenassistent für unterwegs</div><h1>Einmal planen.<br/><span>Entspannt fahren.</span></h1><p>Google Maps übernimmt die Navigation. RoutePilot zeigt dir auf Wunsch Tankpreise bei der Planung und überprüft deutsche Autobahnmeldungen, solange die Web-App läuft.</p></section>
-    <div className="layout">
-      <div className={`stack ${screen === "monitor" ? "mobile-hide" : ""}`}>
-        <section className="card"><div className="card-heading"><h2>Neue Fahrt planen</h2><span className="tiny-badge">01 / Planung</span></div>
-          <form onSubmit={e=>{e.preventDefault();void planTrip();}} aria-busy={loading}><fieldset disabled={loading}><legend className="sr-only">Fahrt planen</legend><div className="form-grid">
-            <div className="field"><label htmlFor="origin">Startadresse</label><div className="input-wrap"><MapPin size={18}/><input required maxLength={300} id="origin" placeholder="z. B. Ravensburg, Deutschland" value={origin} onChange={e=>setOrigin(e.target.value)} autoComplete="street-address"/></div></div>
-            <div style={{display:"flex",justifyContent:"center",height:9,color:"#557365"}}><ArrowDown size={17}/></div>
-            <div className="field"><label htmlFor="destination">Zieladresse</label><div className="input-wrap"><Navigation size={18}/><input required maxLength={300} id="destination" placeholder="z. B. Hamburg, Deutschland" value={destination} onChange={e=>setDestination(e.target.value)}/></div></div>
-            <div className="two-cols">
-              <div className="field"><label htmlFor="vehicle">Fahrzeug</label><select id="vehicle" value={vehicle} onChange={e=>setVehicle(e.target.value as VehicleType)}><option value="transporter">Transporter</option><option value="pkw">PKW</option></select></div>
-              <div className="field"><label htmlFor="fuel">Kraftstoff</label><select id="fuel" value={fuelType} onChange={e=>setFuelType(e.target.value as FuelType)}><option value="diesel">Diesel</option><option value="e10">Super E10</option><option value="e5">Super E5</option></select></div>
-            </div>
-            <div className="field"><label htmlFor="road">Autobahnen überwachen (manuell auswählen)</label><div className="add-highway"><input className="highway-input" id="road" maxLength={10} placeholder="z. B. A8" value={roadInput} onChange={e=>setRoadInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRoad();}}}/><button aria-label="Autobahn hinzufügen" onClick={addRoad} type="button"><Plus size={20}/></button></div>
-              <div className="highways">{roads.map(road=><div className="chip" key={road}>{road}<button aria-label={`${road} entfernen`} onClick={()=>setRoads(current=>current.filter(r=>r!==road))}><X size={14}/></button></div>)}</div>
-              <p className="subnote">Wähle nur Autobahnen, die du tatsächlich nutzt (z. B. A7, A8). Ohne Auswahl findet keine Verkehrsprüfung statt. Meldungen gelten für die gesamte Autobahn, nicht für deinen genauen Streckenabschnitt.</p>
-            </div>
-          </div>
-          <label className="toggle-row"><input type="checkbox" checked={checkFuel} onChange={e=>setCheckFuel(e.target.checked)}/><div><span>Tankpreise bei der Planung prüfen</span><small>Einmalige Abfrage im Umkreis von 10 km deines aktuellen Standorts. Benötigt Standortfreigabe und einen eingerichteten API-Key.</small></div></label>
-          <button className="btn-primary" type="submit" disabled={loading}>{loading ? <><RefreshCw className="spin" size={18}/> Fahrt wird vorbereitet …</> : <>Fahrt vorbereiten <ArrowRight size={18}/></>}</button>
+  return <div className="app">
+    <header className="topbar"><a className="brand" href="/" aria-label="RoutePilot Startseite"><span><Route size={23}/></span>RoutePilot<span className="brand-dot">.</span></a><nav aria-label="Hauptnavigation"><a href="#planner">Routenplaner</a><a href="#traffic">Verkehrslage</a></nav><span className="demo-label"><span/> Präsentationsdemo · v0.2</span></header>
+    <main>
+      <section className="intro"><div><p className="eyebrow">WENIGER UMWEGE. MEHR ÜBERBLICK.</p><h1>Deine Route. <span>Deine Kosten.</span></h1><p>Echte Straßenrouten vergleichen. Kraftstoffkosten nachvollziehen. Informiert losfahren.</p></div><div className="intro-note"><ShieldAlert size={19}/><span>Für PKW & leichte Transporter<br/><strong>Keine LKW-Navigation</strong></span></div></section>
+      <div className="workspace">
+        <aside className="planner panel" id="planner"><div className="panel-title"><span className="step-number">01</span><h2>Wohin geht’s?</h2><SlidersHorizontal size={18}/></div>
+          <form onSubmit={compare} aria-busy={loading}><fieldset disabled={loading}>
+            <label className="field-label" htmlFor="origin">Startadresse</label><div className="place-input"><MapPin size={18}/><input id="origin" required maxLength={180} placeholder="Ort, PLZ oder Straße" value={origin} onChange={e=>{setOrigin(e.target.value);setOriginPlace(null);}}/></div>
+            <div className="swap-row"><span/><button type="button" aria-label="Start und Ziel tauschen" onClick={()=>{setOrigin(destination);setDestination(origin);setOriginPlace(destinationPlace);setDestinationPlace(originPlace);}}><ArrowDownUp size={15}/></button></div>
+            <label className="field-label" htmlFor="destination">Zieladresse</label><div className="place-input"><Navigation size={18}/><input id="destination" required maxLength={180} placeholder="Wohin möchtest du fahren?" value={destination} onChange={e=>{setDestination(e.target.value);setDestinationPlace(null);}}/></div>
+            {choices && <div className="place-choices"><label htmlFor="resolved-origin">Gefundenen Start bestätigen</label><select id="resolved-origin" value={originPlace ? `${originPlace.lat},${originPlace.lng}` : ''} onChange={e=>setOriginPlace(choices.origins.find(p=>`${p.lat},${p.lng}`===e.target.value) ?? null)} required><option value="">Bitte auswählen …</option>{choices.origins.map(p=><option key={`${p.lat},${p.lng}`} value={`${p.lat},${p.lng}`}>{p.label}</option>)}</select><label htmlFor="resolved-destination">Gefundenes Ziel bestätigen</label><select id="resolved-destination" value={destinationPlace ? `${destinationPlace.lat},${destinationPlace.lng}` : ''} onChange={e=>setDestinationPlace(choices.destinations.find(p=>`${p.lat},${p.lng}`===e.target.value) ?? null)} required><option value="">Bitte auswählen …</option>{choices.destinations.map(p=><option key={`${p.lat},${p.lng}`} value={`${p.lat},${p.lng}`}>{p.label}</option>)}</select></div>}
+            <div className="form-separator"/><div className="section-heading"><Fuel size={17}/><h3>Deine Kostenannahmen</h3><span>EDITIERBAR</span></div><p className="hint">Beispielwerte, keine Live-Tankpreise. Passe sie an dein Fahrzeug an.</p>
+            <div className="field-pair"><div><label className="field-label" htmlFor="consumption">Verbrauch · l/100 km</label><input id="consumption" type="number" min="1" max="40" step="0.1" value={consumption} onChange={e=>setConsumption(e.target.value)} required/></div><div><label className="field-label" htmlFor="price">Preisannahme · €/l</label><input id="price" type="number" min="0.5" max="5" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} required/></div></div>
+            <label className="field-label" htmlFor="fuel-type">Kraftstoff</label><select id="fuel-type" value={fuelType} onChange={e=>setFuelType(e.target.value as FuelType)}><option value="diesel">Diesel</option><option value="e10">Super E10</option><option value="e5">Super E5</option></select>
+            <label className="check-row"><input type="checkbox" checked={checkFuel} onChange={e=>setCheckFuel(e.target.checked)}/><span>Tankpreise einmalig prüfen<small>Optional · 10 km um deinen jetzigen Geräte-Standort · Standortfreigabe nötig</small></span></label>
+            <button className="primary full" type="submit" disabled={loading}>{loading?<><Loader2 size={18} className="spin"/> Routen werden verglichen …</>:<>Routen vergleichen <ArrowRight size={18}/></>}</button>
+            {error && <div className="error" role="alert">{error}{plan && <p>Der bisherige Vergleich bleibt mit seinem ursprünglichen Zeitstempel sichtbar.</p>}</div>}
           </fieldset></form>
-          {!trip && error && <p className="error" role="alert">{error}</p>}
-          <p className="info"><CircleHelp size={13} style={{verticalAlign:"middle",marginRight:6}}/>PKW und Transporter im Test. Für schwere LKW ist Google Maps ohne LKW-spezifische Beschränkungen ungeeignet.</p>
-        </section>
-        <section className="card"><div className="card-heading"><h2>So funktioniert's</h2><span className="tiny-badge">Minimal & günstig</span></div>
-          <div className="status-row"><span><Check size={15} style={{verticalAlign:"middle",color:"var(--mint)",marginRight:8}}/> Google Maps als Navigation</span><ChevronRight size={16}/></div>
-          <div className="status-row"><span><Check size={15} style={{verticalAlign:"middle",color:"var(--mint)",marginRight:8}}/> Öffentliche Autobahndaten</span><ChevronRight size={16}/></div>
-          <div className="status-row"><span><Check size={15} style={{verticalAlign:"middle",color:"var(--mint)",marginRight:8}}/> Keine dauernden KI-Aufrufe</span><ChevronRight size={16}/></div>
-          <p className="info">Wichtig: In v0.1 findet keine automatische Berechnung der günstigsten Gesamtstrecke, kein exakter Streckenabgleich und kein verlässliches Monitoring bei geschlossenem Browser statt.</p>
-        </section>
-      </div>
-      <div className={`stack ${screen === "plan" ? "mobile-hide" : ""}`}>
-        <section className="card"><div className="card-heading"><h2>Deine Fahrt</h2><span className={`tiny-badge ${trip?"good":""}`}>{trip ? "Vorbereitet" : "Noch keine Fahrt"}</span></div>
-        {trip ? <>
-          <div className="trip-line"><small>Start</small><strong>{trip.origin}</strong></div>
-          <div className="trip-line"><small>Ziel</small><strong>{trip.destination}</strong></div>
-          <div className="inline-actions"><a className="btn-primary" style={{textDecoration:"none"}} href={navUrl()} target="_blank" rel="noopener noreferrer"><Navigation size={17}/> Google Maps starten <ExternalLink size={14}/></a></div>
-          <p className="info">Google Maps bestimmt die tatsächliche Navigation selbst. Die gewählten Autobahnen müssen separat zur überwachten Route passen.</p>
-          <div className="inline-actions"><button className="btn-muted" onClick={()=>setScreen("plan")}><Settings2 size={15}/> Neu planen</button><button className="btn-muted" onClick={endTrip}><Trash2 size={15}/> Beenden</button></div>
-        </> : <div className="empty"><Navigation size={32} style={{margin:"0 auto 10px"}}/>Plane eine Fahrt. Dann erscheint hier der Startknopf für Google Maps.</div>}
-        </section>
-        <section className="summary">
-          <h3><RadioTower size={17} style={{verticalAlign:"middle",marginRight:9,color:"var(--mint)"}}/> Autobahn-Monitor</h3>
-          <div className="status-row"><span>Überwachte Autobahnen</span><strong>{trip?.roads.length ? trip.roads.join(", ") : "Keine"}</strong></div>
-          <div className="status-row"><span>Prüfintervall</span><strong>15 Minuten (App geöffnet)</strong></div>
-          <div className="status-row"><span>Letzte Abfrage</span><strong>{shortTime(traffic?.checkedAt)}</strong></div>
-          <div className="status-row"><span>Datenstatus</span><strong style={{color:traffic?.status==="ok"?"var(--mint)":traffic?.status==="error"?"var(--danger)":"var(--warning)"}}>{traffic?.status === "ok" ? "Abruf erfolgreich" : traffic?.status === "partial" ? "Teilweise verfügbar" : traffic?.status === "error" ? "Nicht verfügbar" : "Noch keine Daten"}</strong></div>
-          <div className="divider"/>
-          <div className="stat-grid"><div className="stat"><span>Sperrungen</span><b>{traffic?.status !== "error" && traffic ? traffic.events.filter(e=>e.type==="closure").length : "–"}</b></div><div className="stat"><span>Weitere Meldungen</span><b>{traffic?.status !== "error" && traffic ? traffic.events.filter(e=>e.type!=="closure").length : "–"}</b></div></div>
-          <button className="btn-secondary" style={{width:"100%"}} onClick={()=>void checkTraffic(trip?.roads ?? [],false)} disabled={!trip?.roads.length || checking}>{checking ? <><RefreshCw size={16}/> Wird geprüft …</> : <><RefreshCw size={16}/> Jetzt manuell prüfen</>}</button>
-          {trip && <button className="btn-muted" style={{width:"100%",marginTop:9}} onClick={activateNotifications}><Bell size={15}/> Browser-Benachrichtigungen erlauben</button>}
-          <p className="info">Die Web-App kann beim Wechsel zu Google Maps oder gesperrtem Bildschirm pausiert werden. Warnungen sind kein sicherheitskritisches Navigationssystem.</p>
-        </section>
-        <section className="card"><div className="card-heading"><h2>Verkehrsmeldungen</h2><span className="tiny-badge">Autobahn API</span></div>
-          {error && <div className="error" role="alert" style={{marginBottom:13}}>{error}</div>}
-          {!trip ? <div className="empty">Starte die Planung, um aktuelle Meldungen abzurufen.</div> : !trip.roads.length ? <div className="empty">Keine Autobahn für die Überwachung ausgewählt.</div> : !traffic ? <div className="empty" role="status">{checking ? "Prüfe aktuelle Autobahndaten …" : "Noch keine aktuellen Verkehrsdaten. Bitte erneut manuell prüfen."}</div> : traffic.status === "error" ? <div className="empty">Keine verlässlichen Verkehrsdaten empfangen.</div> : <><HighwayEvents items={traffic.events}/>{traffic.status === "partial" && <p className="info" role="status">Die Liste ist unvollständig. Fehlende Meldungen bedeuten keine freie Fahrt.</p>}</>}
-          {!!traffic?.errors.length && <p className="info">Hinweise zur Datenabfrage: {traffic.errors.slice(0,3).join("; ")}{traffic.errors.length>3?" …":""}</p>}
-        </section>
-        <section className="card"><div className="card-heading"><h2>Tankstellen beim Start</h2><Fuel size={18} color="var(--mint)"/></div>
-          {fuelError && <p className="error" role="alert">Tankpreise: {fuelError} Die Fahrt kann trotzdem gestartet werden.</p>}
-          {!trip?.fuel ? <div className="empty">Keine Tankpreise geladen. Aktiviere die Option beim Planen und erlaube deinen Standort. Es findet keine Preisabfrage während der Fahrt statt.</div> : <>
-            <div className="section-label">{trip.fuelType.toUpperCase()} · Stand: {shortTime(trip.fuel.checkedAt)}</div>
-            {trip.fuel.stations.length ? trip.fuel.stations.slice(0,5).map(station=><div className="fuel-item" key={station.id}><div><strong>{station.name}</strong><p>{station.address}<br/>{station.distanceKm.toFixed(1)} km Luftlinie/Anbieterentfernung · {station.isOpen?"Zum Abruf geöffnet":"Zum Abruf geschlossen"}</p></div><div style={{textAlign:"right"}}><div className="price">{station.price.toFixed(3).replace(".",",")} €</div><a aria-label={`${station.name} auf Google Maps anzeigen`} style={{fontSize:11,color:"var(--blue)"}} href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${station.lat},${station.lng}`)}`} target="_blank" rel="noopener noreferrer">Anzeigen ↗</a></div></div>) : <div className="empty">Im abgefragten Umkreis wurden keine Tankstellen mit Preis gefunden.</div>}
-            <p className="info">Preise sind Momentaufnahmen, keine garantierten Zapfsäulenpreise. Stationen liegen um deinen Startstandort, nicht zwingend entlang deiner Route. Quelle: {trip.fuel.source}.</p>
-          </>}
+          <div className="quickstart"><h3>Schnellstart für die Präsentation</h3><p className="hint">Lädt nur Start und Ziel. Die Route wird live berechnet.</p>{presets.map((sample,i)=><button type="button" key={sample.name} onClick={()=>loadPreset(i)} disabled={loading}><Route size={14}/>{sample.name}<ArrowRight size={14}/></button>)}</div>
+          <p className="privacy-note"><Check size={14}/> Kein Konto. Keine Werbung. Keine KI-Aufrufe.</p>
+        </aside>
+        <section className="results" aria-label="Routenvergleich">
+          <div className="map-panel panel"><div className="map-header"><div><span className="overline">{plan?'DEIN ROUTENVERGLEICH':'BEREIT FÜR DEINE NÄCHSTE FAHRT'}</span><h2>{plan?`${plan.origin.label.split(',')[0]} → ${plan.destination.label.split(',')[0]}`:'Gute Entscheidungen beginnen mit echten Daten.'}</h2></div><span className={`data-badge ${plan?'available':''}`}><span/>{plan?`Abgerufen ${time(plan.checkedAt)}`:'Noch keine Route berechnet'}</span></div><RouteMap plan={plan} selected={selected} onSelect={selectRoute}/></div>
+          <div className="comparison-heading"><div><span className="overline">02 · VERGLEICHEN & AUSWÄHLEN</span><h2>{plan?`${plan.routes.length} ${plan.routes.length===1?'Route verfügbar':'Routen im Vergleich'}`:'Welche Route passt zu dir?'}</h2></div><div className="segmented" role="group" aria-label="Routenpriorität"><button aria-pressed={preference==='cheapest'} onClick={()=>choosePreference('cheapest')}><Leaf size={14}/> Kraftstoffarm</button><button aria-pressed={preference==='fastest'} onClick={()=>choosePreference('fastest')}><Clock3 size={14}/> Schnell</button></div></div>
+          {plan ? <><div className="route-grid">{plan.routes.map((item,i)=>{const cost=validCosts?fuelEstimate(item.distanceMetres,litres,priceNumber):null;const cheapest=rankRoutes(plan.routes,'cheapest')[0].id===item.id;const fast=fastest?.id===item.id;return <button className={`route-card ${selected===item.id?'selected':''}`} key={item.id} aria-pressed={selected===item.id} onClick={()=>selectRoute(item.id)}><div className="route-card-head"><strong>Route {i+1}</strong><span className="radio-dot">{selected===item.id && <Check size={12}/>}</span></div><span className="route-tag">{cheapest?'Geringste Kraftstoffschätzung':fast?'Kürzeste Modellfahrzeit':'Weitere Alternative'}</span><div className="route-cost">{cost?euros(cost.cost):'–'}<small>Kraftstoff · geschätzt</small></div><div className="route-metrics"><span><Route size={14}/>{number(item.distanceMetres/1000,1)} km</span><span><Clock3 size={14}/>{duration(item.durationSeconds)}</span></div><span className="road-summary">{item.roads.length?item.roads.join(' · '):item.summary || 'Straßenroute laut OSRM'}</span></button>;})}</div>{plan.routes.length===1 && <p className="hint">Der Routingdienst hat nur eine Alternative geliefert. Ein Routenvergleich oder eine Ersparnis lässt sich daraus nicht ableiten.</p>}<p className="method-note"><Info size={15}/><span>Vergleich nur unter den vom Dienst angebotenen Routen. Zeit = Modellfahrzeit ohne Live-Verkehr und Pausen. Kosten = Strecke × Verbrauch × Preisannahme. Ohne Maut, Parken und Verschleiß.</span></p></> : <div className="empty-comparison"><Route size={28}/><div><strong>Keine erfundenen Kilometer. Keine geschätzte Ersparnis ohne Route.</strong><p>Starte einen Vergleich. Hier erscheinen die tatsächlich berechneten Alternativen mit transparenten Kraftstoffschätzungen.</p></div></div>}
+          {route && estimate && plan && <section className="trip-summary" aria-label="Ausgewählte Route"><div><span className="overline">DEINE AUSWAHL</span><h2>{euros(estimate.cost)} <small>Kraftstoffschätzung</small></h2><p>{number(estimate.litres,1)} l bei {number(litres,1)} l/100 km und {euros(priceNumber)}/l</p>{difference>=0.01 && <span className="saving-note">{euros(difference)} weniger als die schnellste angebotene Route – unter diesen Annahmen.</span>}</div><div className="trip-actions"><a className="primary" target="_blank" rel="noopener noreferrer" href={mapsDirectionsUrl(`${plan.origin.lat},${plan.origin.lng}`,`${plan.destination.lat},${plan.destination.lng}`)}><Navigation size={17}/> In Google Maps öffnen <ExternalLink size={14}/></a><div><button className="secondary" onClick={()=>setJourney(!journey)}><CheckCircle2 size={16}/>{journey?'Fahrtmodus aktiv':'Fahrtmodus starten'}</button><button className="icon-button" aria-label="Fahrtübersicht herunterladen" onClick={exportPlan}><Download size={18}/></button></div><p>Google Maps kann eine andere Route wählen.</p></div></section>}
+          {journey && <div className="journey-banner"><Navigation size={20}/><div><strong>Gute Fahrt. Das Wesentliche im Blick.</strong><p>Nur im Stand bedienen. Verkehrsprüfung alle 15 Minuten, solange die Seite sichtbar ist. Kein zuverlässiger Hintergrunddienst.</p></div><button className="secondary" onClick={endJourney}>Fahrt beenden</button></div>}
+          <div className="information-grid">
+            <section className="panel traffic-panel" id="traffic"><div className="panel-title"><span className="step-number">03</span><h2>Verkehr & Baustellen</h2><button className="icon-button" onClick={()=>void checkTraffic(roadKey)} disabled={!roadKey || checking} aria-label="Verkehrsmeldungen manuell prüfen"><RefreshCw size={17} className={checking?'spin':''}/></button></div><p className="hint">Offizielle Autobahndaten. {route?'Abgleich über die räumliche Nähe zur gewählten Routenlinie.':'Nach dem Routenvergleich werden die erkannten Autobahnen geprüft.'}</p>
+              <div className="traffic-meta"><span>{checking?'Wird geprüft …':traffic?`Abruf ${time(traffic.checkedAt)}`:'Noch keine Verkehrsprüfung'}</span><strong>{traffic?.status==='ok'?'Abruf erfolgreich':traffic?.status==='partial'?'Teilweise verfügbar':traffic?.status==='error'?'Nicht verfügbar':'–'}</strong></div>
+              {trafficError && <div className="error" role="alert">{trafficError}</div>}
+              {!!traffic?.errors.length && <div className="warning" role="status">{traffic.errors.join(' · ')}</div>}
+              <div className="road-chips">{allRoads.slice(0,5).map(road=><span key={road}>{road}</span>)}</div>{allRoads.length>5 && <p className="warning">Mehr als fünf Autobahnen erkannt. Nur die ersten fünf werden geprüft; die Abdeckung ist unvollständig.</p>}
+              <details><summary>Autobahn zusätzlich auswählen <ChevronDown size={14}/></summary><div className="manual-road"><label className="sr-only" htmlFor="manual-road">Zusätzliche Autobahn</label><input id="manual-road" value={manualRoad} onChange={e=>setManualRoad(e.target.value)} placeholder="z. B. A7" maxLength={10}/><button className="icon-button" onClick={addRoad} aria-label="Autobahn hinzufügen"><Plus size={18}/></button></div><p className="hint">Manuell gewählte Autobahnen sind kein Nachweis für den Verlauf deiner Fahrt.</p></details>
+              {traffic && traffic.status!=='error' && <div className="event-toggle"><label><input type="checkbox" checked={showAll} onChange={e=>setShowAll(e.target.checked)}/> Ganze ausgewählte Autobahnen anzeigen</label></div>}
+              {checking && !traffic?<p className="empty" role="status">Offizielle Verkehrsmeldungen werden abgerufen …</p>:traffic && traffic.status!=='error'?<><div className="event-list" role="region" aria-label="Verkehrsmeldungen" tabIndex={0}>{events.length?events.map(event=><TrafficItem key={event.id} event={event}/>):<p className="empty">{showAll?'Keine Meldungen in den empfangenen Kategorien.':'Keine Meldung mit bekanntem Standort im 3-km-Korridor gefunden.'} Das ist keine Garantie für freie Fahrt.</p>}</div><p className="hint">{showAll?'Meldungen gelten für die gesamte Autobahn.':'Geometrische Nähe ist kein Nachweis für Fahrtrichtung oder tatsächliche Betroffenheit. Meldungen ohne Koordinaten erscheinen nur in der Gesamtansicht.'} {traffic.status==='partial'?'Datenabdeckung unvollständig.':''}</p></>:!trafficError && <p className="empty">{plan && !roadKey?'Keine Autobahn in der gewählten Route erkannt. Bei Bedarf manuell ergänzen.':'Nach deiner Planung erscheinen hier verfügbare Meldungen.'}</p>}
+            </section>
+            <section className="panel fuel-panel"><div className="panel-title"><span className="fuel-icon"><Fuel size={19}/></span><h2>Tankpreise am Standort</h2><span className="optional">OPTIONAL</span></div><p className="hint">Einmaliger Preis-Snapshot bei der Planung. Keine automatische Preisabfrage während der Fahrt.</p>{fuelError && <div className="warning" role="alert">{fuelError} Der Routenvergleich funktioniert trotzdem.</div>}{fuel?<><div className="snapshot-time">{fuel.type.toUpperCase()} · {time(fuel.checkedAt)}</div>{fuel.stations.length?fuel.stations.slice(0,5).map(station=><article className="station" key={station.id}><div><strong>{station.name}</strong><p>{station.address}</p><small>{number(station.distanceKm,1)} km Anbieterentfernung · {station.isOpen?'beim Abruf geöffnet':'beim Abruf geschlossen'}</small></div><div><b>{number(station.price,3)} €<small>/ Liter</small></b><a href={`https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`} target="_blank" rel="noopener noreferrer" aria-label={`${station.name} auf Google Maps anzeigen`}>Anzeigen ↗</a></div></article>):<p className="empty">Keine Stationen mit verfügbarem Preis im abgefragten Umkreis.</p>}<p className="hint">Momentaufnahme, kein garantierter Zapfsäulenpreis. Stationen befinden sich um deinen Geräte-Standort zum Abrufzeitpunkt und nicht zwingend an der Route. Quelle: Tankerkönig / MTS-K (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>).</p></>:<div className="fuel-empty"><Fuel size={30}/><strong>Nur wenn du es möchtest.</strong><p>Aktiviere die Tankpreisoption vor dem Vergleich. Ein eingerichteter Server-Schlüssel und deine Standortfreigabe sind erforderlich.</p><span>Die Preisannahme im Vergleich bleibt unabhängig davon editierbar.</span></div>}</section>
+          </div>
         </section>
       </div>
-    </div>
-    <nav className="tabs only-mobile" aria-label="Ansichten"><button aria-pressed={screen==="plan"} className={screen==="plan"?"active":""} onClick={()=>setScreen("plan")}><Route size={16}/> Planen</button><button aria-pressed={screen==="monitor"} className={screen==="monitor"?"active":""} onClick={()=>setScreen("monitor")}><Gauge size={16}/> Fahrt & Meldungen</button></nav>
-    <footer className="footer"><p>RoutePilot v0.1 · Prototyp · Kein Ersatz für Verkehrszeichen oder sichere Navigation</p><p>Verkehrsdaten: <a href="https://www.autobahn.de/" target="_blank" rel="noreferrer">Autobahn GmbH des Bundes</a> · Optional Tankpreise: <a href="https://creativecommons.tankerkoenig.de/" target="_blank" rel="noreferrer">Tankerkönig / MTS-K (CC BY 4.0)</a></p></footer>
-    {toast && <div role="status" className="toast">{toast}</div>}
-  </main>;
+      <section className="trust-strip"><div><CheckCircle2 size={20}/><span><strong>Nachvollziehbar</strong>Reale Strecken, offene Annahmen</span></div><div><Leaf size={20}/><span><strong>Schlank betrieben</strong>Keine bezahlten Maps- oder KI-Aufrufe</span></div><div><ShieldAlert size={20}/><span><strong>Ehrlich begrenzt</strong>Keine Live-ETA oder LKW-Freigabe</span></div></section>
+    </main>
+    <footer><a className="footer-brand" href="#planner">RoutePilot.</a><p>Einfach planen. Bewusst fahren.</p><div><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a><a href="https://project-osrm.org/" target="_blank" rel="noreferrer">OSRM Routing</a><a href="https://www.autobahn.de/" target="_blank" rel="noreferrer">Autobahn GmbH</a><a href="/transparenz">Daten & Datenschutz</a></div><small>Präsentationsdemo · Öffentliche Geodienste ohne Verfügbarkeitsgarantie · Keine verbindliche Kosten- oder Sicherheitszusage</small></footer>
+    {notice && <div className="toast" role="status"><CheckCircle2 size={18}/>{notice}<button aria-label="Hinweis schließen" onClick={()=>setNotice('')}><X size={17}/></button></div>}
+  </div>;
 }
+
+function TrafficItem({event}:{event:TrafficEvent}){return <article className="event"><div><span className={`event-tag ${event.type}`}><TriangleAlert size={12}/>{labels[event.type]} · {event.road}</span>{event.future && <span className="planned">Geplant</span>}</div><h3>{event.title}</h3>{event.subtitle && <p>{event.subtitle}</p>}{event.description && <details><summary>Meldung lesen</summary><p>{event.description}</p></details>}</article>;}

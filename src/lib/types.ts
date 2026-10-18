@@ -7,6 +7,7 @@ export type TrafficEvent = {
   road: string;
   type: RoadEventType;
   future?: boolean;
+  coordinate?: {lat:number;lng:number} | null;
   title: string;
   subtitle: string;
   description: string;
@@ -50,3 +51,7 @@ export type Trip = {
   createdAt: string;
   fuel: FuelSnapshot | null;
 };
+
+export type Place = {label:string;lat:number;lng:number};
+export type RouteOption = {id:string;distanceMetres:number;durationSeconds:number;geometry:[number,number][];roads:string[];summary:string};
+export type RoutePlan = {origin:Place;destination:Place;routes:RouteOption[];checkedAt:string;source:string;trafficAware:false};

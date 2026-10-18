@@ -21,3 +21,12 @@
 - Optional live fuel behavior requires a real server-side Tankerkönig key supplied securely in environment/project settings. Automated failure/validation tests do not prove provider account authorization.
 - Rate limiting is bounded per process, not a shared serverless quota. Apply host-level limits/provider quotas before exposing commercial traffic.
 - Reusable installation/start instructions and required network domains were saved in the environment configuration draft. Draft saving is not environment publication or verification in a new task.
+
+# v0.2 presentation update — 18 October 2026
+
+- Public source was explicitly approved by the user; the earlier private-repository push restriction no longer applies to this demo.
+- Added real manual route search, confirmed-place disambiguation, OSRM geometry/alternatives, transparent editable fuel-cost estimates, interactive Leaflet map, route-proximity traffic filtering and trip text export. Added `/transparenz`; refreshed README/AGENTS.
+- `npm run test`: 29 checks passed, including route parsing, cost arithmetic, ranking, geometric proximity, geocoding input and API failure/rate-limit contracts. Typecheck/build passed; npm audit reported zero vulnerabilities.
+- Live local routing: Ravensburg–München 179.9592 km (one offered route); Berlin–Hamburg 289.8209 km (one); Köln–Frankfurt 189.9416 km and 215.0772 km (two). Counts/distances are observations, not fixed app values or future guarantees.
+- Photon live GeoJSON was retrieved after the cloud network addition took effect. The provider allows moderate fair-use queries without an SLA; it is not a production capacity commitment.
+- An anonymous temporary Vercel evaluation preview was created using the CLI's supported `deploy --temporary` flow. It does not establish membership in cronixsystems-projects, a paid/commercial plan, permanent hosting or GitHub continuous deployment. The CLI supplied an expiry of 18 October 2026, 12:59 CEST; the presentation link must not be described as permanent.

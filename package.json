@@ -11,6 +11,7 @@
     "test:browser": "node tests/browser-smoke.cjs"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "next": "15.5.28",
     "react": "19.1.1",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RoutePilot | Einmal planen. Entspannt fahren.",
-  description: "Mobile Routenplanung mit Google Maps, deutscher Autobahn-Verkehrslage und optionalem Tankstellenvergleich.",
+  title: "RoutePilot | Deine Route. Deine Kosten.",
+  description: "Echte Straßenrouten vergleichen, Kraftstoffkosten transparent schätzen und Autobahnmeldungen prüfen.",
   applicationName: "RoutePilot",
   manifest: "/manifest.webmanifest",
   icons: { icon: "/icon.svg" },
