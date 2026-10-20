@@ -38,3 +38,10 @@
 - RouteMap uses Leaflet with attributed OpenStreetMap tiles; respect provider policies, no offline tile prefetch.
 - A 3-km corridor is only spatial proximity, not a guarantee of direction, connectivity or actual impact. Events without coordinates remain available in the motorway-wide view.
 - `/transparenz` describes data, limitations and browser storage. Do not invent operator/company details.
+
+## Free hosting decision — 20 October 2026
+
+- The user chose to keep hosting free and change provider instead of paying for Vercel Pro. Use the free Render web-service configuration in `render.yaml`; never upgrade a hosting plan, add a paid datastore/disk, or enable billable add-ons without new explicit authorization.
+- The Vercel project remains prepared but is not the selected deployment target. Its team is Hobby. Git was disconnected and an automatically triggered, unreviewed deployment was removed; do not re-enable Vercel deployment for this commercial buyer-demo goal on Hobby.
+- Render must bind to the platform PORT on 0.0.0.0. Production builds explicitly include development dependencies for TypeScript and tests. The optional Tankerkönig key remains server-only and must be entered securely only if desired.
+- A free Render service can sleep and has quotas; never promise always-on hosting or add periodic keep-alive traffic to evade platform limits. Verify the actual hosted URL before presenting it as ready.

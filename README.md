@@ -57,9 +57,25 @@ The demo has no paid API subscriptions and no account/database/AI costs. Hosting
 - **Tankerkönig / MTS-K**: https://creativecommons.tankerkoenig.de/ , CC BY 4.0. Review provider approval, attribution and commercial terms for the intended service. Obtain a real key securely; no sample/invented key.
 - **Vercel**: current [Hobby documentation](https://vercel.com/docs/plans/hobby) restricts Hobby to personal/non-commercial usage. A buyer presentation serves a commercial purpose: do not assume Hobby eligibility. Verify the actual team's commercial plan before retaining a permanent business deployment or starting paid usage. No paid plan is purchased automatically.
 
-## GitHub and Vercel
+## Render Free deployment (selected hosting)
 
-The user approved public source for this demo on 18 October 2026. The intended GitHub repository is `CroNixSystems/routepilot-v01`; the intended permanent Vercel team is `cronixsystems-projects`. Never commit `.env.local`, `.vercel`, `node_modules`, build outputs or deployment credentials.
+The user chose free presentation hosting on 20 October 2026. `render.yaml` defines exactly one **Free** Node web service with no paid database, persistent disk or add-on.
+
+[Deploy this demo on Render](https://render.com/deploy?repo=https://github.com/CroNixSystems/routepilot-v01)
+
+1. Sign in to Render (GitHub sign-in is supported) and authorize this public repository if requested.
+2. Review the Blueprint: service `routepilot-v01`, **Free** instance, Frankfurt, Node 24.19.0. Its build installs development dependencies and runs the tests, typecheck and production build.
+3. Use a free workspace with **no payment method** to keep a strict $0 budget. Render's [free-service documentation](https://render.com/docs/free) says quota exhaustion then suspends services/builds rather than billing. An existing workspace with a payment method can incur supplemental bandwidth/build charges even when the compute instance is Free; do not enable billing, paid resources or supplementary purchases automatically.
+4. Deploy and wait for the service to become healthy. The start command binds to `0.0.0.0` on Render's supplied `PORT`; `/` is the health check. Render supplies the actual HTTPS `onrender.com` address; do not invent a hostname from the service name.
+5. Verify the actual hosted page, route/traffic APIs and mobile workflow before sharing the URL. An optional `TANKERKOENIG_API_KEY` can be added securely in the service environment later; the demo works without it and displays an explicit fuel error when requested.
+
+Free services sleep after 15 minutes without inbound traffic and take about a minute to restart. There are shared monthly instance-hour, build and bandwidth quotas, and the local filesystem is ephemeral. Open the link ahead of a presentation. Do not add keep-alive polling to defeat the host's free-service limits. This is evaluation hosting, not an always-on production commitment. The app's existing 15-minute visible-page road checks remain unchanged; fuel is never polled.
+
+Render's CLI can also deploy the same settings after secure device authorization and workspace selection. Only use `--plan free`. Workspace-specific Blueprint validation and hosted validation require that authorization; local JSON Schema validation does not establish cloud deployment success.
+
+## GitHub and Vercel (optional paid alternative)
+
+The user approved public source for this demo on 18 October 2026. The intended GitHub repository is `CroNixSystems/routepilot-v01`; if Vercel is chosen later, the intended team is `cronixsystems-projects`. Render Free is the current selected host. Never commit `.env.local`, `.vercel`, `node_modules`, build outputs or deployment credentials.
 
 1. Push the reviewed source to the intended GitHub repository. `git push -u origin main`; never force-push an existing branch.
 2. Authenticate Vercel CLI (`vercel login`) with access to the intended team. Inspect that team's Billing and confirm its plan permits the commercial usage; approve any charges separately.
@@ -79,4 +95,4 @@ Before broad business launch, the operator must supply accurate company/contact/
 
 ## Connected Vercel project status (20 October 2026)
 
-The intended team project `cronixsystems-projects/routepilot-v01` is now created, linked and configured for Next.js / Node 24.x / `npm ci` / `npm run build`. GitHub `CroNixSystems/routepilot-v01` is connected on `main`, but automatic deployment creation is disabled. The actual team plan is Hobby, so no buyer-demo deployment was published under that plan. Resolve commercial hosting before deploying; verify current billing rather than relying on this historical status. After a preview and production checks pass, enable the project's Git deployment creation to complete continuous deployment. No billing upgrade was performed automatically.
+The intended team project `cronixsystems-projects/routepilot-v01` is now created, linked and configured for Next.js / Node 24.x / `npm ci` / `npm run build`. GitHub was initially connected, but has now been disconnected after a push unexpectedly triggered a deployment despite the reported disabled setting. That unreviewed deployment was removed. The actual team plan is Hobby, so no Vercel buyer-demo deployment is retained. Resolve commercial hosting before deploying; verify current billing rather than relying on this historical status. After a preview and production checks pass, enable the project's Git deployment creation to complete continuous deployment. No billing upgrade was performed automatically.

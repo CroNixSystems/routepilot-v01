@@ -1,0 +1,20 @@
+# Free presentation hosting. No paid database, disk or add-on is provisioned.
+services:
+  - type: web
+    name: routepilot-v01
+    runtime: node
+    plan: free
+    region: frankfurt
+    repo: https://github.com/CroNixSystems/routepilot-v01
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm ci --include=dev && npm run test && npm run typecheck && npm run build
+    startCommand: npm run start -- --hostname 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
