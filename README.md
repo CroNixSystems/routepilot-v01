@@ -48,7 +48,7 @@ Browser tests use explicitly isolated test-only route/provider fixtures to test 
 
 ## Provider policies and running cost
 
-The demo has no paid API subscriptions and no account/database/AI costs. Hosting is subject to the chosen Vercel plan; do not advertise unlimited or guaranteed zero-cost operation.
+The demo has no paid API subscriptions and no account/database/AI costs. Render Free is the selected presentation host; its quotas and workspace billing settings still apply. Do not advertise unlimited or guaranteed zero-cost operation.
 
 - **OSRM public demo** (`router.project-osrm.org`): low-volume interactive evaluation only; no SLA, live traffic or truck restrictions. For scale use a suitable hosted or self-hosted routing service. Source: https://project-osrm.org/ . `ROUTING_BASE_URL` allows an operator to switch to an HTTPS OSRM-compatible service without a source change.
 - **Photon public demo** (`photon.komoot.io`): [fair use](https://github.com/komoot/photon#public-demo-server), reasonable request volume only; extensive use can be throttled/banned and availability is not guaranteed. Searches are manual-only, serialized and cached in a bounded process-local cache. `GEOCODING_BASE_URL` switches to another HTTPS Photon-compatible service without a source change. No default dependency on the public Nominatim service.

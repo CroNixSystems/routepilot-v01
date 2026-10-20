@@ -28,7 +28,7 @@
 - Keep README feature/limitation list accurate. Add tests for new matching/pricing logic.
 - Keep `.env.local` out of git. Never commit secrets.
 
-- The user explicitly approved public source for the presentation demo on 18 October 2026. Push only to the intended CroNixSystems/routepilot-v01 repository. Deploy only to the intended Vercel team after verifying its plan permits the usage; validate a preview before production promotion.
+- The user explicitly approved public source for the presentation demo on 18 October 2026. Push only to the intended CroNixSystems/routepilot-v01 repository. The selected host is Render Free (see below). If Vercel is chosen again, use only the intended team after verifying its plan permits the usage; validate a preview before production promotion.
 
 ## v0.2 routing and presentation
 
