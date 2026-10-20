@@ -76,3 +76,7 @@ For a buyer demonstration, use **Köln → Frankfurt** quickstart and click **Ro
 Not yet a production dispatch platform: no truck-safe routing, toll calculation, actual traffic-aware ETA/closure avoidance, along-route fuel optimization, reliable native background service, account sync or billing. Heavy trucks require a suitable legal routing provider. Native Android/iOS wrappers can reuse the UI/API model, but reliable background work needs native platform implementation and permissions.
 
 Before broad business launch, the operator must supply accurate company/contact/legal information, review privacy/processor obligations, select providers with adequate capacity and commercial terms, and configure distributed rate protection. The demo does not invent operator details or claim these business requirements are already complete.
+
+## Connected Vercel project status (20 October 2026)
+
+The intended team project `cronixsystems-projects/routepilot-v01` is now created, linked and configured for Next.js / Node 24.x / `npm ci` / `npm run build`. GitHub `CroNixSystems/routepilot-v01` is connected on `main`, but automatic deployment creation is disabled. The actual team plan is Hobby, so no buyer-demo deployment was published under that plan. Resolve commercial hosting before deploying; verify current billing rather than relying on this historical status. After a preview and production checks pass, enable the project's Git deployment creation to complete continuous deployment. No billing upgrade was performed automatically.

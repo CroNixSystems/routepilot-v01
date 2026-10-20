@@ -37,3 +37,12 @@
 - Source was pushed successfully to the authorized intended public repository. The permanent Vercel team project, its commercial plan and GitHub continuous deployment remain unconfigured because device sign-in has not completed.
 - Final hosted browser smoke suite passed at 1440/390/320 pixels with zero detected accessibility violations. Its test harness waits for observable React state and invokes the registered 15-minute callback without replacing global clocks used by hosting scripts; no timer harness exists in production code. Fixture-powered assertions and real provider checks remain separate.
 - A real hosted 390-pixel mobile session also returned two genuine routes with no page errors, no horizontal overflow and no detected axe A/AA violations. The desktop session rendered real map tiles and route geometry. Build/typecheck and the 29 logic/API checks passed; final dependency audit reported zero vulnerabilities.
+
+# Vercel account connection — 20 October 2026
+
+- User completed secure Vercel device authorization. Authenticated access to `cronixsystems-projects` was verified with OWNER membership.
+- The team's actual billing metadata reports active **Hobby**, with no active Pro trial. Current official Hobby documentation restricts usage to personal/non-commercial projects. A buyer presentation requires a commercial-eligible plan or another suitable host. No paid plan, trial or billing change was started.
+- Created and linked the exact `cronixsystems-projects/routepilot-v01` project, connected to `CroNixSystems/routepilot-v01`, branch `main`. Verified framework Next.js, Node 24.x, install `npm ci`, build `npm run build`.
+- Git deployment creation is disabled (`createDeployments: disabled`), and no deployment exists in this project. Keep automatic builds disabled until commercial hosting is resolved and a preview has been validated. No permanent public application URL is claimed.
+- Vercel CLI generated ignored local project metadata and a local OIDC binding; neither credential values nor `.env.local` / `.vercel` contents are committed. Source application code is unchanged in this step.
+- Remaining decision: upgrade/approve suitable Vercel hosting through team Billing, or choose a free host whose terms permit this commercial demonstration. Authentication is no longer the blocker.
